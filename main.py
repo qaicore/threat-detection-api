@@ -2,8 +2,8 @@ from multiprocessing import current_process
 from fastapi import FastAPI, Depends
 from fastapi import HTTPException
 from database import engine
-from models import Base, Case, User, Indicator
-from schemas import UserCreate, UserResponse, IndicatorCreate, CaseCreate
+from models import Base, Case, User, Indicator, CaseIndicator
+from schemas import UserCreate, UserResponse, IndicatorCreate, IndicatorResponse, CaseCreate, CaseResponse, CaseStatusUpdate, CaseIndicatorCreate
 from database import get_db
 from auth import hash_password, verify_password, create_token, get_current_user
 from sqlalchemy.orm import Session
@@ -40,7 +40,7 @@ def login(user: UserCreate, db: Session = Depends(get_db)):
     user_token = create_token({"sub": existing_user.email})
     return user_token
     
-@app.post("/indicators")
+@app.post("/api/indicators", status_code=201, response_model=IndicatorResponse)
 def create_indicator(indicator: IndicatorCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     new_indicator = Indicator(value = indicator.value, type = indicator.type, severity = indicator.severity, notes = indicator.notes, tags = indicator.tags )
     db.add(new_indicator)
@@ -48,17 +48,31 @@ def create_indicator(indicator: IndicatorCreate, db: Session = Depends(get_db), 
     db.refresh(new_indicator)
     return new_indicator
 
-@app.get("/indicators")
-def list_indicators(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    indicators = db.query(Indicator).all()
-    return indicators
+@app.get("/api/indicators", response_model=list[IndicatorResponse])
+def list_indicators(
+    skip: int = 0,
+    limit: int = 20,
+    type: str = None,
+    severity: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    query = db.query(Indicator)
+    if type:
+        query = query.filter(Indicator.type == type)
+    if severity:
+        query = query.filter(Indicator.severity == severity)
+    return query.offset(skip).limit(limit).all()
 
-@app.get("/indicators/{id}")
+@app.get("/api/indicators/{id}", response_model=IndicatorResponse)
 def id_indicator(id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     indicator = db.query(Indicator).filter(Indicator.id == id).first()
+    if indicator is None:
+        raise HTTPException(status_code=404, detail="Indicator not found")
     return indicator
+    
 
-@app.post("/cases")
+@app.post("/api/cases", status_code=201, response_model=CaseResponse)
 def create_case(case: CaseCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     new_case = Case(title = case.title, description = case.description, severity = case.severity)
     db.add(new_case)
@@ -66,12 +80,39 @@ def create_case(case: CaseCreate, db: Session = Depends(get_db), current_user: U
     db.refresh(new_case)
     return new_case
 
-@app.get("/cases")
+@app.get("/api/cases", response_model=list[CaseResponse])
 def list_cases(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     cases = db.query(Case).all()
     return cases
 
-@app.get("/cases/{id}")
-def id_case(id:int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@app.get("/api/cases/{id}", response_model=CaseResponse)
+def id_case(id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     case = db.query(Case).filter(Case.id == id).first()
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
     return case
+    
+
+@app.patch("/api/cases/{id}/status", response_model=CaseResponse)
+def update_case(id: int, status_update: CaseStatusUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    case = db.query(Case).filter(Case.id == id).first()
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+    case.status = status_update.status
+    db.commit()
+    db.refresh(case)
+    return case
+   
+@app.post("/api/cases/{id}/indicators")
+def case_indicators(case_indicator: CaseIndicatorCreate, id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    case = db.query(Case).filter(Case.id == id).first()
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+    indicator = db.query(Indicator).filter(Indicator.id == case_indicator.indicator_id).first()
+    if indicator is None:
+        raise HTTPException(status_code=404, detail="Indicator not found")
+    new_case_indicator = CaseIndicator(case_id = id, indicator_id = case_indicator.indicator_id)
+    db.add(new_case_indicator)
+    db.commit()
+    db.refresh(new_case_indicator)
+    return new_case_indicator
