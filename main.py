@@ -8,7 +8,6 @@ from database import get_db
 from auth import hash_password, verify_password, create_token, get_current_user
 from sqlalchemy.orm import Session
 
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 @app.get("/health")
@@ -42,7 +41,7 @@ def login(user: UserCreate, db: Session = Depends(get_db)):
     
 @app.post("/api/indicators", status_code=201, response_model=IndicatorResponse)
 def create_indicator(indicator: IndicatorCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    new_indicator = Indicator(value = indicator.value, type = indicator.type, severity = indicator.severity, notes = indicator.notes, tags = indicator.tags )
+    new_indicator = Indicator(value = indicator.value, type = indicator.type, severity = indicator.severity, notes = indicator.notes, tags = indicator.tags, submitted_by = current_user.id)
     db.add(new_indicator)
     db.commit()
     db.refresh(new_indicator)

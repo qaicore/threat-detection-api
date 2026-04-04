@@ -38,7 +38,6 @@ class CaseCreate(BaseModel):
     severity: str
 
 class CaseResponse(BaseModel):
-    from_attributes = True
     title: str
     description: str
     severity: str
