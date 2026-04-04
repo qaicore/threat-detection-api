@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 
 
 app = FastAPI()
+
+Base.metadata.create_all(bind=engine)
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -37,7 +40,7 @@ def login(user: UserCreate, db: Session = Depends(get_db)):
     if not verify_user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     user_token = create_token({"sub": existing_user.email})
-    return user_token
+    return {"access_token": user_token, "token_type": "bearer"}
     
 @app.post("/api/indicators", status_code=201, response_model=IndicatorResponse)
 def create_indicator(indicator: IndicatorCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
